@@ -1,0 +1,15 @@
+Package: MIBCconsensus
+Title: What the Package Does (one line, title case)
+Version: 0.0.0.9000
+Authors@R: person("Aurelie", "Kamoun", email = "aurelie.kamoun@ligue-cancer.net", role = c("aut", "cre"))
+Maintainer: <aurelie.kamoun@ligue-cancer.net>
+Description: Methods for building a consensus molecular classification of muscle invasive bladder cancer using existing classification systems.
+Depends: R (>= 3.3.2), ComplexHeatmap, ConsensusClusterPlus, cluster,
+        DescTools, proxy, igraph
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+URL: http://cit.ligue-cancer.net
+NeedsCompilation: no
+Packaged: 2018-01-24 16:30:25 UTC; aurelie.kamoun
+Author: Aurelie Kamoun [aut, cre]
