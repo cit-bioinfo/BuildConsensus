@@ -1,23 +1,52 @@
-# Rd
-# description >> Compare and cluster various classification systems using a "Cluster of Cluster" approach.
-# argument
-# item >> annot.class >> Dataframe of samples annotated according to the several classification systems to compare.
-# item >> outdir >> Path to the directory where to store plots and results. A new directory will be created if the supplied path does not exist.
-# item >> maxK >> Integer value. maximum cluster number to evaluate.
-# value >> A list of length maxK. Each element is a list containing consensusMatrix (numerical matrix), consensusTree (hclust), consensusClass (consensus class asssignments)
-# author >> Aurelie Kamoun
-# keyword >> methods
-# details >> ...
-# seealso >> ...
-# references >> ...
-# examples >> ...
-# end
-consensus.CoC <- function(annot.class, outdir, maxK = 8, reps = 100, seed = 12,
-                          innerLinkage = "ward.D2", finalLinkage = "ward.D2", distance = "euclidean", ...){
-  require(ConsensusClusterPlus)
-  require(ComplexHeatmap)
+#' Build a consensus classification using the COCA method
+#' 
+#' Compare and cluster various classification systems using a "Cluster of Cluster" approach
+#' 
+#' @param annot.class a dataframe of samples annotated according to the several 
+#' classification systems to compare.
+#' @param outdir the path to the directory where to store plots and results. 
+#' A new directory will be created if the supplied path does not exist.
+#' @param maxK an integer value that aximum cluster number to be evaluated.
+#' @param reps an integer value that represents the number of repetitions to be performed.
+#' @param seed an integer. Used for result reproducibility. See \link{set.seed}
+#' @param innerLinkage a linkage method for constructing the hierarchical clustering. 
+#' See \link[stats]{hclust} for linkage methods.
+#' @param finalLinkage a linkage method for constructing the final clustering. 
+#' See \link[stats]{hclust} for linkage methods.
+#' @param distance a distance metric to evaluate the samples. See \link[stats]{dist} for methods.
+#' @param ... other parameters passed to \link[ConsensusClusterPlus]{ConsensusClusterPlus}
+#' 
+#' @author Aurelie Kamoun
+#' 
+#' @examples 
+#' \dontrun{
+#'  #-- Using bladder cancer classes as example
+#'  library(BuildConsensus)
+#'  data(blca_class)
+#'  
+#'  coca_res <- consensus.coca(blca_class[sample(nrow(blca_class), 500),], 
+#'  outdir = "coca_res", maxK = 5)
+#' }
+#' 
+#' @importFrom grDevices dev.off pdf rainbow
+#' @importFrom graphics layout par plot text legend
+#' @importFrom stats fisher.test p.adjust
+#' @importFrom utils write.table
+#' @importFrom DescTools CohenKappa
+#' @importFrom igraph graph.data.frame membership cluster_optimal V modularity layout.graphopt
+#' @importFrom ConsensusClusterPlus ConsensusClusterPlus calcICL
+#' @importFrom ComplexHeatmap HeatmapAnnotation Heatmap 
+#' @importFrom grid gpar
+#' @importFrom cluster silhouette
+#' @importFrom proxy dist
+#' 
+#' @export
+#' 
+consensus.COCA <- function(annot.class, outdir, maxK = 8, reps = 100, seed = 12,
+                          innerLinkage = "ward.D2", finalLinkage = "ward.D2", 
+                          distance = "euclidean", ...){
   
-  cat("You can have a 2 minutes break \n")
+  cat("You can take a break while your computer is processing... \n")
   
   if(!dir.exists(outdir)) {dir.create(outdir)}
   
@@ -28,35 +57,38 @@ consensus.CoC <- function(annot.class, outdir, maxK = 8, reps = 100, seed = 12,
                                      times = apply(annot.class, 2, function(cl){length(table(cl))})),
                                  unlist(apply(annot.class, 2, function(cl) unique(cl))), sep = "_")
   
-  coc <- ConsensusClusterPlus(cluster.mat, maxK = maxK, reps = reps,
+  cluster.mat[is.na(cluster.mat)] <- FALSE
+  
+  coca <- ConsensusClusterPlus(cluster.mat, maxK = maxK, reps = reps,
                               title = outdir, distance = distance,
                               innerLinkage = innerLinkage, finalLinkage = finalLinkage,
                               corUse = "complete.obs",
                               seed = seed, plot = "pdf", ...)
   
-  save(coc, file = file.path(outdir, "coc_results.RData"))
+  save(coca, file = file.path(outdir, "coca_results.RData"))
 
-  icl <- calcICL(coc, title = outdir, plot = "pdf")
+  icl <- calcICL(coca, title = outdir, plot = "pdf")
   
   pdf(file = file.path(outdir, "Heatmaps.pdf"), width = 12, height = 6)
   for(k in 2:maxK){
-    col.class <- coc[[k]]$clrs[[3]]
+    col.class <- coca[[k]]$clrs[[3]]
     names(col.class) <- c(1:k)
-    annotSamples <- HeatmapAnnotation(data.frame(consensus = coc[[k]]$consensusClass),
+    annotSamples <- HeatmapAnnotation(df = data.frame(consensus = as.character(coca[[k]]$consensusClass),
+                                                 row.names = names(coca[[k]]$consensusClass)),
                                       col = list(consensus = col.class)
-    )
+                                      )
     ComplexHeatmap::draw(Heatmap(1*cluster.mat, col = c("ghostwhite", "dimgrey"), name = "",
                   row_names_gp = gpar(fontsize = 10), 
                   show_column_names = F, top_annotation = annotSamples,
-                  cluster_columns = coc[[k]]$consensusTree,
+                  cluster_columns = coca[[k]]$consensusTree,
                   clustering_method_rows = "ward.D2")
     )
   }
   dev.off() 
   
   # plot average silhouette width
-  sil.mean <- sapply(coc[2:length(coc)], function(k){mean(summary(silhouette(k$consensusClass,1-k$consensusMatrix))$clus.avg.widths)})
-  names(sil.mean) <- 2:length(coc)
+  sil.mean <- sapply(coca[2:length(coca)], function(k){mean(summary(silhouette(k$consensusClass,1-k$consensusMatrix))$clus.avg.widths)})
+  names(sil.mean) <- 2:length(coca)
   
   point.col <- c("black", "red")[as.numeric(as.factor(sil.mean == max(sil.mean)))]
   
@@ -66,32 +98,65 @@ consensus.CoC <- function(annot.class, outdir, maxK = 8, reps = 100, seed = 12,
   
   dev.off()
   
-  invisible(coc)
+  invisible(coca)
 }
 
-
-# Rd
-# description >> Compare and cluster various classification systems applying the same method as in Guinney et al (see reference).
-# argument
-# item >> annot.class >> Dataframe of samples annotated according to the several classification systems to compare.
-# item >> I.values >> A vector of inflation factors values to use with MCL algorithm. The function running time linearly depends on the given number of values (about 3 minutes for each inflation factor value)
-# item >> outdir >> Path to the directory where to store plots and results. A new directory will be created if the supplied path does not exist.
-# item >> resamp >> Value between 0 and 1. Proportion of samples to use for MCL bootstrap iterations. Default is 0.8.
-# item >> n.iter >> Number of MCL bootstrap iterations for each inflation factor value. Default is 1000.
-# item >> pval.cut >> Cut-off for adjusted P-value to select significant network edges (Fisher test). Default is 0.001 
-# value >> A list with the same length of I.values numerical vector. Each element is a list containing the cluster assignments (cl), the co-classification matrix (consensusMat), a subtype stability measure (subtype.stab), the mean weighted average silhouette width (wsil.mean)
-# author >> Aurelie Kamoun
-# keyword >> methods
-# details >> ...
-# seealso >> ...
-# references >> 1.Guinney, J. et al. The consensus molecular subtypes of colorectal cancer. Nat Med advance online publication, (2015).
-# examples >> ...
-# end
+#' Build a consensus classification using the MCL method
+#' 
+#' Compare and cluster various classification systems applying the same method as in 
+#' Guinney et al (see reference).
+#' 
+#' @param annot.class Dataframe of samples annotated according to the several 
+#' classification systems to compare.
+#' @param I.values A vector of inflation factors values to use with MCL algorithm. 
+#' The function running time linearly depends on the given number of values 
+#' (about 3 minutes for each inflation factor value)
+#' @param outdir Path to the directory where to store plots and results. 
+#' A new directory will be created if the supplied path does not exist.
+#' @param resamp Value between 0 and 1. Proportion of samples to use for MCL 
+#' bootstrap iterations. Default is 0.8.
+#' @param n.iter Number of MCL bootstrap iterations for each inflation factor value. Default is 1000.
+#' @param pval.cut Cut-off for adjusted P-value to select significant network edges (Fisher test). 
+#' Default is 0.001
+#' @param seed an integer value. See \link{set.seed}
+#' @param sim.method a string representing the simulation method. One of "Jaccard" or "CohenKappa".
+#' @param filter.ini one of "fisher" or "cohenkappa", to be used for initial filtering.
+#' @param ck.cut a number between 0 and 1.
+#' 
+#' @return A list with the same length of I.values numerical vector. Each element is a 
+#' list containing the cluster assignments (cl), the co-classification matrix (consensusMat),
+#'  a subtype stability measure (subtype.stab), the mean weighted average 
+#'  silhouette width (wsil.mean)
+#'  
+#' @examples 
+#' \dontrun{
+#' #-- Using bladder cancer classes as example
+#' library(BuildConsensus)
+#' data(blca_class)
+#'  
+#' mcl_res <- consensus.MCL(blca_class, outdir = "MCL_res")
+#' }
+#'  
+#' @author Aurelie Kamoun
+#' @keywords methods
+#' @references 1.Guinney, J. et al. The consensus molecular subtypes of colorectal cancer. 
+#'  Nat Med advance online publication, (2015).
+#'  
+#' @importFrom grDevices dev.off pdf rainbow
+#' @importFrom graphics layout par plot text legend
+#' @importFrom stats fisher.test p.adjust
+#' @importFrom utils write.table
+#' @importFrom DescTools CohenKappa
+#' @importFrom igraph graph.data.frame membership cluster_optimal V modularity layout.graphopt
+#' @importFrom ConsensusClusterPlus ConsensusClusterPlus calcICL
+#' @importFrom ComplexHeatmap HeatmapAnnotation Heatmap 
+#' @importFrom grid gpar
+#' @importFrom cluster silhouette
+#' @importFrom proxy dist
+#' 
+#' @export
 consensus.MCL <- function(annot.class, I.values = 3.2, outdir, resamp = .8, n.iter = 1000, pval.cut = 0.001, seed = 42,
                           sim.method = c("Jaccard", "CohenKappa")[1], filter.ini = c("fisher", "cohenkappa")[1], ck.cut = .2){
-  
-  require(proxy)
-  require(cluster)
   
   cat("Final results in ",  round(.4 * n.iter * length(I.values) / 60) , " minutes", "\n")
   
@@ -106,9 +171,18 @@ consensus.MCL <- function(annot.class, I.values = 3.2, outdir, resamp = .8, n.it
   rownames(cluster.mat) <- paste(rep(sapply(colnames(annot.class), function(x){unlist(strsplit(x, split = "\\."))[[1]]}), 
                                      times = apply(annot.class, 2, function(cl){length(table(cl))})),
                                  unlist(apply(annot.class, 2, function(cl) unique(cl))), sep = "_")
- 
-
-# Build network based on Jaccard similarities and prepare data for MCL
+  
+  
+  # cluster.mat <- cluster.mat[-grep("NA$", rownames(cluster.mat)),]
+  
+  suppressWarnings(mcl_installed <- system("which mcl", intern = TRUE))
+  if (length(mcl_installed) == 0) {
+    stop("Please install the 'mcl' library. In Debian-based Linux distributions, it can be installed\n
+         using sudo apt-get install mcl")
+  }
+  
+  
+  # Build network based on Jaccard similarities and prepare data for MCL
   
   if(sim.method == "Jaccard"){
     # Compute Jaccard similarity matrix
@@ -128,8 +202,8 @@ consensus.MCL <- function(annot.class, I.values = 3.2, outdir, resamp = .8, n.it
   
   if(filter.ini == "fisher"){
     network$pval <- apply(network[, 1:2], 1, function(x){fisher.test(table(cluster.mat[as.character(x[1]), ],  
-                                                                          cluster.mat[as.character(x[2]), ]), 
-                                                                    alternative = "greater")$p.value})
+                                                                           cluster.mat[as.character(x[2]), ]), 
+                                                                     alternative = "greater")$p.value})
     network$pval.adj <- p.adjust(network$pval, method = "BH")
     write.table(network[which(network$pval.adj < pval.cut), c("node1", "node2", "weight")], file = file.path(mclfilesdir, "data.abc"), sep = " ", row.names = F, col.names = F, quote = F)
   } else if(filter.ini == "cohenkappa"){
@@ -146,14 +220,14 @@ consensus.MCL <- function(annot.class, I.values = 3.2, outdir, resamp = .8, n.it
       write.table(network[which(ck.score >= ck.cut), c("node1", "node2", "weight")], file = file.path(mclfilesdir, "data.abc"), sep = " ", row.names = F, col.names = F, quote = F)
     }
   }
-      
+  
   system(paste("cd ", mclfilesdir, "; mcxload -abc data.abc --stream-mirror -write-tab data.tab -o data.mci", sep = ""), ignore.stdout = T, ignore.stderr = T)
-
-      
-# Partition network using MCL algorithm
-    
+  
+  
+  # Partition network using MCL algorithm
+  
   MCL <- list()
-    
+  
   for(I in I.values){            
     
     system(paste("cd ", mclfilesdir, "; mcl data.mci -I ", I, sep = ""), ignore.stdout = T, ignore.stderr = T)
@@ -168,17 +242,17 @@ consensus.MCL <- function(annot.class, I.values = 3.2, outdir, resamp = .8, n.it
     network.all <- crossprod(table(cl.all[rownames(cluster.mat)],rownames(cluster.mat)))
     network.all <- network.all[rownames(cluster.mat), rownames(cluster.mat)]
     
-
-# Initialize co-classification matrix and subtypes stability measures 
+    
+    # Initialize co-classification matrix and subtypes stability measures 
     
     consensusMat <- matrix(0, ncol = nrow(cluster.mat), nrow = nrow(cluster.mat),
                            dimnames = list(rownames(cluster.mat), rownames(cluster.mat)))
     
     network.stab <- matrix(0, ncol = nrow(cluster.mat), nrow = nrow(cluster.mat),
                            dimnames = list(rownames(cluster.mat), rownames(cluster.mat)))
-
     
-# Bootstrap iterations: iterate network contruction and partitioning using only a subset of samples
+    
+    # Bootstrap iterations: iterate network contruction and partitioning using only a subset of samples
     
     if(!dir.exists(file.path(mclfilesdir, "tmp"))) {dir.create(file.path(mclfilesdir, "tmp"))}
     
@@ -205,8 +279,8 @@ consensus.MCL <- function(annot.class, I.values = 3.2, outdir, resamp = .8, n.it
       
       if(filter.ini == "fisher"){
         network$pval <- apply(network[, 1:2], 1, function(x){fisher.test(table(dat[as.character(x[1]), ],  
-                                                                            dat[as.character(x[2]), ]), 
-                                                                      alternative = "greater")$p.value})
+                                                                               dat[as.character(x[2]), ]), 
+                                                                         alternative = "greater")$p.value})
         network$pval.adj <- p.adjust(network$pval, method = "BH")
         write.table(network[which(network$pval.adj < pval.cut), c("node1", "node2", "weight")], file = file.path(mclfilesdir, "tmp/iter.abc"), sep = " ", row.names = F, col.names = F, quote = F)
       } else if(filter.ini == "cohenkappa"){
@@ -239,9 +313,9 @@ consensus.MCL <- function(annot.class, I.values = 3.2, outdir, resamp = .8, n.it
       network.stab <- network.stab + apply(assocMat == network.all, 1, as.numeric)
       
     }
-
     
-# Bootstrap aggregating 
+    
+    # Bootstrap aggregating 
     
     MCL[[paste(I)]]$consensusMat <- consensusMat/n.iter
     MCL[[paste(I)]]$subtype.stab <- apply(network.stab, 2, mean)/n.iter
@@ -293,31 +367,50 @@ consensus.MCL <- function(annot.class, I.values = 3.2, outdir, resamp = .8, n.it
   
   #Iwrite <- if(length(I.values) > 1) paste(10  *I.values[1], "-", 10 * I.values[length(I.values)], sep = "") else as.character(10 * I.values[1])
   save(MCL, file = file.path(outdir, "mcl_results.RData"))
-       
-  invisible(MCL)
   
-
+  invisible(MCL)
 }
 
+#' Build a consensus classification using the CIT method
+#' 
+#' Compare and cluster various classification systems using Cohen's Kappa.
+#' 
+#' @param annot.class Dataframe of samples annotated according to the several 
+#' classification systems to compare.
+#' @param outdir Path to the directory where to store plots and results. 
+#' A new directory will be created if the supplied path does not exist.
+#' @param CohenKappa.cut Value of Cohen's Kappa to select significant associations.
+#' 
+#' @return A list of length 3 containing the Cohen's Kappa measures for any pair 
+#' of subtypes (CohenKappaMat), the corresponding network generated (graph), 
+#' the cluster assignments (cl)
+#' 
+#' @examples
+#' \dontrun{
+#'  #-- Using bladder cancer classes as example
+#'  library(BuildConsensus)
+#'  data(blca_class)
+#'  
+#'  cit_res <- consensus.CIT(blca_class, outdir = "CIT_res")
+#' }
+#' @author Aurélie Kamoun
+#' @keywords methods
+#' 
+#' @importFrom grDevices dev.off pdf rainbow
+#' @importFrom graphics layout par plot text legend
+#' @importFrom stats fisher.test p.adjust
+#' @importFrom utils write.table
+#' @importFrom DescTools CohenKappa
+#' @importFrom igraph graph.data.frame membership cluster_optimal V modularity layout.graphopt
+#' @importFrom ConsensusClusterPlus ConsensusClusterPlus calcICL
+#' @importFrom ComplexHeatmap HeatmapAnnotation Heatmap 
+#' @importFrom grid gpar
+#' @importFrom cluster silhouette
+#' @importFrom proxy dist
+#' 
+#' @export
 
-# Rd
-# description >> Compare and cluster various classification systems using Cohen's Kappa.
-# argument
-# item >> annot.class >> Dataframe of samples annotated according to the several classification systems to compare.
-# item >> outdir >> Path to the directory where to store plots and results. A new directory will be created if the supplied path does not exist.
-# item >> CohenKappa.cut >> Value of Cohen's Kappa to select significant associations.
-# value >> A list of length 3 containing the Cohen's Kappa measures for any pair of subtypes (CohenKappaMat), the corresponding network generated (graph), the cluster assignments (cl)
-# author >> Aurelie Kamoun
-# keyword >> methods
-# details >> ...
-# seealso >> ...
-# references >> ...
-# examples >> ...
-# end
 consensus.CIT <- function(annot.class, outdir, CohenKappa.cut = seq(0.1, .7, .1)){
-  require(cluster)
-  require(DescTools) 
-  require(igraph)
   
   if(!dir.exists(outdir)) {dir.create(outdir)}
   
@@ -330,7 +423,7 @@ consensus.CIT <- function(annot.class, outdir, CohenKappa.cut = seq(0.1, .7, .1)
                                  unlist(apply(annot.class, 2, function(cl) unique(cl))), sep = "_")
   
   # Compute similarity matrix (Cohen Kappa)
-  CohenKappa. <- function(i, j, data) {CohenKappa(data[, i], data[, j])}
+  CohenKappa. <- function(i, j, data) {DescTools::CohenKappa(data[, i], data[, j])}
   CohenKappa.v <- Vectorize(CohenKappa., vectorize.args  = list("i", "j"))
   S <- outer(1:nrow(cluster.mat), 1:nrow(cluster.mat), CohenKappa.v, data = t(cluster.mat))
   dimnames(S) <- list(rownames(cluster.mat), rownames(cluster.mat))
@@ -345,7 +438,7 @@ consensus.CIT <- function(annot.class, outdir, CohenKappa.cut = seq(0.1, .7, .1)
   for(ck in CohenKappa.cut){
     
     # Resulting network
-    E <- which(1*upper.tri(S)*S > ck, arr = T)
+    E <- which(1*upper.tri(S)*S > ck, arr.ind = T)
     network <- data.frame(node1 = rownames(S)[E[,1]], node2 = rownames(S)[E[,2]], weight = S[E])
   
     # Visualize graph and optimal community structure (maximizing modularity)
@@ -355,8 +448,8 @@ consensus.CIT <- function(annot.class, outdir, CohenKappa.cut = seq(0.1, .7, .1)
     color.nodes <- rainbow(length(unique(CIT[[paste(ck)]]$cl)))[CIT[[paste(ck)]]$cl]
     names(color.nodes) <- names(CIT[[paste(ck)]]$cl)
   
-    V(CIT[[paste(ck)]]$graph)$color <- color.nodes[names(V(CIT[[paste(ck)]]$graph))]
-    V(CIT[[paste(ck)]]$graph)$shape <- "square"
+    # V(CIT[[paste(ck)]]$graph)$color <- color.nodes[names(V(CIT[[paste(ck)]]$graph))]
+    # V(CIT[[paste(ck)]]$graph)$shape <- "square"
   
     mod <- append(mod, modularity(cluster_optimal(CIT[[paste(ck)]]$graph)))
     ncl <- append(ncl, length(unique(CIT[[paste(ck)]]$cl)))
@@ -382,4 +475,4 @@ consensus.CIT <- function(annot.class, outdir, CohenKappa.cut = seq(0.1, .7, .1)
 
 }
 
-#consensus.compare <- function(mcl_results = NULL, coc_results = NULL, cit_results = NULL){}
+#consensus.compare <- function(mcl_results = NULL, coca_results = NULL, cit_results = NULL){}

@@ -1,0 +1,77 @@
+---
+title: "BuildConsensus - Build a Consensus Classification from Multiple Classification Systems"
+output: 
+    html_document:
+        toc: true
+vignette: >
+  %\VignetteIndexEntry{BuildConsensus}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+# Overview
+
+This package implements methods for building a consensus molecular classification using existing classification systems. Functions implemented in this package were used for the Consensus Classifications of Colorectal and Bladder Cancer.
+
+# Example
+
+Three methods of reaching a consensus classification are implemented: COCA (Cluster of Clusters Analysis), MCL (Markov Cluster Algorithm) and CIT, which was used in Rebouiossou et. al.
+
+All methods require the same input data, which is a `data.frame` with samples as observations (rows) and the different classification systems as variables (columns). 
+
+As an example, we can use the table for the six classification systems in muscle-invasive bladder cancer (MIBC).
+
+```{r eval=FALSE}
+library(BuildConsensus)
+data(blca_class)
+
+head(blca_class, 8)
+```
+
+```{r echo=FALSE}
+library(BuildConsensus)
+data(blca_class)
+kableExtra::kable_styling(knitr::kable(head(blca_class, 8)), c("striped"))
+```
+
+## MCL algorithm
+
+To run the MCL algorithm using `consensus.MCL`, the mcl library has to be installed in your system. For installation instructions, please refer to Github README file: https://github.com/cit-bioinfo/BuildConsensus/ 
+The MCL algorithm itself is outlined in the algorithm website: https://micans.org/mcl/
+
+Once the data is provided in the `data.frame` format described above, we can run the MCL algorithm by also specifying the inflation factors and the output directory. Multiple inflation factors can be evaluated in one run.
+
+A simple example can be run using:
+
+```{r eval=FALSE}
+mcl_res <- consensus.MCL(blca_class, I.values = 3, outdir = "MCL_res",n.iter = 500, sim.method = "CohenKappa")
+```
+
+This inflation value for this dataset renders a K=4 solution, as seen below. 
+
+```{r echo=FALSE}
+knitr::include_graphics("MCL_res/Heatmap_I30.png")
+```
+
+When multiple inflation values are being compared, the silhouette vs inflation factor plot can guide the user towards selecting the optimal result.
+
+```{r echo=FALSE}
+knitr::include_graphics("MCL_res/silhouette_vs_InflationFactor.png")
+```
+
+# Reproducing the MIBC BLCA Consensus
+
+The Consensus Classes of MIBC were computed using the MCL algorithm and the parameters described below. **Warning:** this will take a long time to run.
+
+```{r eval=FALSE}
+mcl_res <- consensus.MCL(blca_class, I.values = seq(3, 15, 0.3), outdir = "../MCL_res", resamp = .8, n.iter = 500, sim.method = "CohenKappa", filter.ini = "fisher", ck.cut = 0)
+```
+
+Note that due to a random element, your solution may be differ slightly from the reported Consensus solution.
+
+
+
+
+
+
+

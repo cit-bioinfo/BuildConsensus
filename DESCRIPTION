@@ -1,15 +1,14 @@
 Package: BuildConsensus
-Title: What the Package Does (one line, title case)
-Version: 0.0.0.9000
+Title: Build a Consensus Classification from Multiple Classification Systems
+Version: 1.0.0
 Authors@R: person("Aurelie", "Kamoun", email = "aurelie.kamoun@ligue-cancer.net", role = c("aut", "cre"))
 Maintainer: <aurelie.kamoun@ligue-cancer.net>
-Description: Methods for building a consensus molecular classification using existing classification systems.
-Depends: R (>= 3.3.2), ComplexHeatmap, ConsensusClusterPlus, cluster,
-        DescTools, proxy, igraph
-License: What license is it under?
+Description: This package implements methods for building a consensus molecular classification using existing classification systems.
+Depends: R (>= 3.5)
+Imports: ComplexHeatmap, ConsensusClusterPlus, cluster, DescTools, igraph, proxy
+License: GPL(>=2)
 Encoding: UTF-8
 LazyData: true
 URL: http://cit.ligue-cancer.net
-NeedsCompilation: no
-Packaged: 2018-01-24 16:30:25 UTC; aurelie.kamoun
 Author: Aurelie Kamoun [aut, cre]
+RoxygenNote: 6.1.1
