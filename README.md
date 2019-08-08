@@ -36,8 +36,7 @@ If you already have the igraph library installed in R, please remove it using `r
 The package can be installed directly from Github using `devtools` or `remotes` in R.
 
 ```{r}
-devtools::install_github("cit-bioinfo/BuildConsensus", dependencies = TRUE)
-```
+devtools::install_github("cit-bioinfo/BuildConsensus", dependencies = TRUE, build_vignettes = TRUE)
 ```
 
 
